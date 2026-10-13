@@ -264,7 +264,7 @@ footer a { color: var(--muted); }
       pyodide = await loadPyodide();
       pyodide.setStdout({ batched: log });
       pyodide.setStderr({ batched: function (s) { log('PY-ERR: ' + s); } });
-      var resp = await fetch('ly2musicxml.py');
+      var resp = await fetch('ly2musicxml.py?v=2', { cache: 'no-cache' });
       if (!resp.ok) throw new Error('ly2musicxml.py の取得に失敗');
       var code = await resp.text();
       pyodide.FS.writeFile('ly2musicxml.py', code, { encoding: 'utf8' });
