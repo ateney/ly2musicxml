@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ly2musicxml — LilyPond → MusicXML 変換</title>
+<meta name="description" content="LilyPond (.ly) の楽譜ソースをブラウザ内で MusicXML に変換します。ファイルはどこにも送信されません。">
+<style>
+:root {
+  --bg: #0e1116;
+  --panel: #161b23;
+  --border: #262d38;
+  --text: #e6e9ef;
+  --muted: #8a93a5;
+  --accent: #4da3ff;
+  --accent-ink: #0b1220;
+  --ok: #3fd08a;
+  --err: #ff6b6b;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  line-height: 1.7;
+  min-height: 100vh;
+}
+.wrap { max-width: 820px; margin: 0 auto; padding: 48px 20px 80px; }
+header h1 { font-size: 2rem; letter-spacing: -0.02em; }
+header h1 span { color: var(--accent); }
+header p.tagline { color: var(--muted); margin-top: 8px; font-size: 0.95rem; }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 24px;
+}
+label.row-label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; font-weight: 600; letter-spacing: 0.04em; }
+textarea {
+  width: 100%;
+  min-height: 180px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+textarea:focus, .dropzone.focused { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin-top: 14px;
+  transition: border-color 0.15s;
+}
+.dropzone:hover, .dropzone.focused { border-color: var(--accent); color: var(--text); }
+.dropzone input { display: none; }
+.actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+button {
+  font: inherit;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 22px;
+  cursor: pointer;
+}
+#convertBtn { background: var(--accent); color: var(--accent-ink); }
+#convertBtn:disabled { opacity: 0.4; cursor: wait; }
+#sampleBtn { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+#sampleBtn:hover { color: var(--text); border-color: var(--muted); }
+#status { font-size: 0.85rem; color: var(--muted); }
+#log {
+  margin-top: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 260px;
+  overflow-y: auto;
+  display: none;
+  color: var(--muted);
+}
+#results { margin-top: 16px; display: none; }
+.dl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+.dl .size { color: var(--muted); font-size: 0.75rem; }
+.dl a { color: var(--accent); text-decoration: none; font-weight: 600; margin-left: auto; }
+.dl a:hover { text-decoration: underline; }
+.ok-badge { color: var(--ok); font-weight: 700; }
+details.help { margin-top: 20px; color: var(--muted); font-size: 0.88rem; }
+details.help summary { cursor: pointer; color: var(--text); font-weight: 600; }
+details.help ul { margin: 10px 0 0 20px; }
+footer { margin-top: 48px; color: var(--muted); font-size: 0.82rem; }
+footer a { color: var(--muted); }
+.privacy {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 0.8rem;
+  color: var(--ok);
+  background: rgba(63, 208, 138, 0.08);
+  border: 1px solid rgba(63, 208, 138, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ly<span>2</span>musicxml</h1>
+    <p class="tagline">LilyPond (.ly) の楽譜ソースをその場で MusicXML に変換。MuseScore / Finale / Sibelius で直接開けます。</p>
+    <span class="privacy">🔒 すべての処理はブラウザ内 (WebAssembly) で完結。ファイルはどこにも送信されません。</span>
+  </header>
+
+  <div class="panel">
+    <label class="row-label">LILYPOND ソース（ペースト または ファイル選択）</label>
+    <textarea id="src" spellcheck="false" placeholder="ここに .ly の内容をペースト、または下からファイルを選択してください"></textarea>
+    <div class="dropzone" id="dropzone">
+      📄 .ly ファイルをドラッグ＆ドロップ、またはクリックして選択
+      <input type="file" id="fileInput" accept=".ly,.txt">
+    </div>
+    <div class="actions">
+      <button id="convertBtn" disabled>変換する</button>
+      <button id="sampleBtn">サンプルを読み込む</button>
+      <span id="status">Python (Wasm) を初期化中…</span>
+    </div>
+    <pre id="log"></pre>
+    <div id="results"></div>
+  </div>
+
+  <details class="help">
+    <summary>対応機能と使い方</summary>
+    <ul>
+      <li>対応: 相対音程 (\relative)、和音、タイ、スラー、連符 (tuplet)、\repeat unfold、ピックアップ小節 (\partial)、調・拍子・テンポ変更、強弱記号、ヘアピン、アーティキュレーション、音部記号、\ottava</li>
+      <li>構成: <code>&lt;name&gt;_begin</code> ブロックと <code>&lt;name&gt;_violin_a</code> など各パート変数を自動検出します</li>
+      <li>1ファイルに複数楽章があれば、楽章ごとに .musicxml を書き出します</li>
+      <li>CLI 版 (ly2musicxml.py) も同梱: <code>python ly2musicxml.py movement-1.ly -o out.musicxml</code></li>
+    </ul>
+  </details>
+
+  <footer>
+    <a href="https://github.com/ateney/ly2musicxml">ateney/ly2musicxml</a> ·
+    Python 3 がブラウザ内で動作しています (Pyodide) · MIT License
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+(function () {
+  'use strict';
+  var pyodide = null;
+  var srcEl = document.getElementById('src');
+  var dropzone = document.getElementById('dropzone');
+  var fileInput = document.getElementById('fileInput');
+  var convertBtn = document.getElementById('convertBtn');
+  var sampleBtn = document.getElementById('sampleBtn');
+  var statusEl = document.getElementById('status');
+  var logEl = document.getElementById('log');
+  var resultsEl = document.getElementById('results');
+
+  function log(s) {
+    logEl.style.display = 'block';
+    logEl.textContent += s + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setStatus(s, ok) {
+    statusEl.textContent = s;
+    statusEl.style.color = ok ? 'var(--ok)' : 'var(--err)';
+  }
+
+  dropzone.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files.length) readFile(fileInput.files[0]);
+  });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) {
+      e.preventDefault();
+      dropzone.classList.add('focused');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) {
+      e.preventDefault();
+      dropzone.classList.remove('focused');
+    });
+  });
+  dropzone.addEventListener('drop', function (e) {
+    if (e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]);
+  });
+
+  function readFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      srcEl.value = reader.result;
+      log('読み込みました: ' + file.name + ' (' + file.size + ' bytes)');
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  var SAMPLE =
+'\\version "2.18.2"\n' +
+'sample_begin =\n' +
+'{\n' +
+'  \\tempo "Andante" 4 = 88\n' +
+'  \\time 3/4\n' +
+'  \\key g \\major\n' +
+'}\n' +
+'sample_violin_a = \\new Voice \\relative c\'\'\n' +
+'{\n' +
+'  \\partial 4 g4 | a( b) c | b2 g4 | a2. | g2 r4 |\n' +
+'  \\bar "|."\n' +
+'}\n' +
+'sample_violin_b = \\new Voice \\relative g\'\n' +
+'{\n' +
+'  \\partial 4 d4 | fis( g) g | g2 d4 | e2. | d2 r4 |\n' +
+'  \\bar "|."\n' +
+'}\n' +
+'sample_viola = \\new Voice \\relative c\'\n' +
+'{\n' +
+'  \\clef alto\n' +
+'  \\partial 4 b4 | d( e) e | d2 b4 | c2. | b2 r4 |\n' +
+'  \\bar "|."\n' +
+'}\n' +
+'sample_cello = \\new Voice \\relative c\n' +
+'{\n' +
+'  \\clef bass\n' +
+'  \\partial 4 g4 | d2 e4 | g2. | a2. | g2 r4 |\n' +
+'  \\bar "|."\n' +
+'}\n';
+
+  sampleBtn.addEventListener('click', function () {
+    srcEl.value = SAMPLE;
+    log('サンプルを読み込みました。「変換する」を押してください。');
+  });
+
+  async function init() {
+    try {
+      pyodide = await loadPyodide();
+      pyodide.setStdout({ batched: log });
+      pyodide.setStderr({ batched: function (s) { log('PY-ERR: ' + s); } });
+      var resp = await fetch('ly2musicxml.py');
+      if (!resp.ok) throw new Error('ly2musicxml.py の取得に失敗');
+      var code = await resp.text();
+      pyodide.FS.writeFile('ly2musicxml.py', code, { encoding: 'utf8' });
+      pyodide.runPython("import sys; sys.path.insert(0, '/')");
+      pyodide.runPython('import ly2musicxml');
+      convertBtn.disabled = false;
+      setStatus('準備完了', true);
+    } catch (err) {
+      setStatus('初期化に失敗しました: ' + err.message, false);
+      console.error(err);
+    }
+  }
+
+  convertBtn.addEventListener('click', convert);
+  convertBtn.addEventListener('touchstart', function (e) {
+    e.preventDefault();
+    convert();
+  }, { passive: false });
+
+  async function convert() {
+    if (!pyodide || convertBtn.disabled) return;
+    var text = srcEl.value;
+    if (!text.trim()) {
+      log('エラー: LilyPond ソースが空です。ペーストするかファイルを選択してください。');
+      return;
+    }
+    convertBtn.disabled = true;
+    resultsEl.style.display = 'none';
+    resultsEl.textContent = '';
+    setStatus('変換中…', false);
+    try {
+      pyodide.FS.writeFile('input.ly', text, { encoding: 'utf8' });
+      pyodide.runPython(
+        "import glob, os\n" +
+        "for f in glob.glob('*.musicxml'):\n" +
+        "    try:\n" +
+        "        os.unlink(f)\n" +
+        "    except OSError:\n" +
+        "        pass\n");
+      var rc = pyodide.runPython("import ly2musicxml; ly2musicxml.main(['input.ly'])");
+      var files = pyodide.runPython(
+        "import glob\nsorted(glob.glob('*.musicxml'))").toJs();
+      if (files.length === 0) {
+        log('出力ファイルがありません。ログを確認してください。');
+        setStatus('変換失敗 (exit ' + rc + ')', false);
+      } else {
+        for (var i = 0; i < files.length; i++) {
+          var name = files[i];
+          var bytes = pyodide.FS.readFile(name);
+          var blob = new Blob([bytes], {
+            type: 'application/vnd.recordare.musicxml+xml'
+          });
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = name;
+          a.textContent = 'ダウンロード';
+          var div = document.createElement('div');
+          div.className = 'dl';
+          var nm = document.createElement('span');
+          nm.textContent = name;
+          var sz = document.createElement('span');
+          sz.className = 'size';
+          sz.textContent = Math.round(bytes.length / 1024) + ' KB';
+          div.appendChild(nm);
+          div.appendChild(sz);
+          div.appendChild(a);
+          resultsEl.appendChild(div);
+        }
+        resultsEl.style.display = 'block';
+        setStatus('<span class="ok-badge">✓ 変換完了</span> (' + files.length + ' ファイル)', true);
+        statusEl.innerHTML = '<span class="ok-badge">✓ 変換完了</span> (' +
+          files.length + ' ファイル)';
+      }
+    } catch (err) {
+      log('JS エラー: ' + err.message);
+      setStatus('エラーが発生しました', false);
+      console.error(err);
+    }
+    convertBtn.disabled = false;
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
