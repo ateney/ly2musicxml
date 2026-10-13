@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ly2musicxml.py - standalone LilyPond (.ly) -> MusicXML converter.
+r"""ly2musicxml.py - standalone LilyPond (.ly) -> MusicXML converter.
 
 Verified note-for-note against LilyPond's own MIDI output for
 Shostakovich String Quartet No. 8, movements 1-2 (all 8 parts match
